@@ -1,0 +1,71 @@
+{
+  "name": "kasper-desktop",
+  "productName": "Kasper",
+  "version": "2.0.2",
+  "description": "Kasper Desktop App",
+  "author": "Kasper",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "publish:win": "electron-builder --win --publish always",
+    "publish:mac": "electron-builder --mac --publish always"
+  },
+  "build": {
+    "appId": "com.kasper.desktop",
+    "productName": "Kasper",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*"
+    ],
+
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "doltnamn-se",
+        "repo": "kasper-desktop",
+        "releaseType": "release"
+      }
+    ],
+
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico",
+      "artifactName": "Kasper-Setup-win.exe"
+    },
+
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Kasper",
+      "license": "assets/license.txt",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "installerSidebar": "assets/installerSidebar.bmp",
+      "installerHeader": "assets/installerHeader.bmp"
+    },
+
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "artifactName": "Kasper-mac.dmg"
+    }
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.7.3"
+  }
+}
