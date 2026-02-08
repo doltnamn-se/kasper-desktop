@@ -21,7 +21,6 @@
     "files": [
       "**/*"
     ],
-
     "publish": [
       {
         "provider": "github",
@@ -34,7 +33,7 @@
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico",
-      "artifactName": "Kasper-Setup-win.exe"
+      "artifactName": "Kasper.exe"
     },
 
     "nsis": {
@@ -49,7 +48,8 @@
       "uninstallerIcon": "assets/icon.ico",
       "installerHeaderIcon": "assets/icon.ico",
       "installerSidebar": "assets/installerSidebar.bmp",
-      "installerHeader": "assets/installerHeader.bmp"
+      "installerHeader": "assets/installerHeader.bmp",
+      "artifactName": "Kasper.exe"
     },
 
     "mac": {
@@ -57,7 +57,7 @@
       "icon": "assets/icon.icns",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "artifactName": "Kasper-mac.dmg"
+      "artifactName": "Kasper.dmg"
     }
   },
   "devDependencies": {
