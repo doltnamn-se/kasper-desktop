@@ -1,29 +1,27 @@
 const { app, BrowserWindow, shell, nativeTheme, Tray, Menu, ipcMain } = require("electron");
 const path = require("path");
 
-// Auto updates
 const { autoUpdater } = require("electron-updater");
 const log = require("electron-log");
 
 const APP_NAME = "Kasper";
-const APP_URL = "https://app.joinkasper.com";
+const APP_ORIGIN = "https://app.joinkasper.com";
 
-// Titlebar overlay heights / safe zones
 const TITLEBAR_HEIGHT_WIN = 42;
-const WIN_CONTROLS_SAFE_RIGHT = 140; // space reserved for Windows window buttons
-const TITLEBAR_HEIGHT_MAC = 28; // padding only; mac titlebar is handled by titleBarStyle
+const WIN_CONTROLS_SAFE_RIGHT = 140;
+const TITLEBAR_HEIGHT_MAC = 28;
 
 let mainWindow;
 let tray = null;
+let authWindow = null;
 
 log.transports.file.level = "info";
 autoUpdater.logger = log;
 
-// Single instance lock
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
-} else {
+// single instance
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+else {
   app.on("second-instance", () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
@@ -33,10 +31,10 @@ if (!gotTheLock) {
   });
 }
 
-function getOverlayColorsFromSystem() {
+function getOverlayColors() {
   const isDark = nativeTheme.shouldUseDarkColors;
   return isDark
-    ? { color: "#1a1a1a", symbolColor: "#FFFFFF" }
+    ? { color: "#161618", symbolColor: "#FFFFFF" }
     : { color: "#fafafa", symbolColor: "#111111" };
 }
 
@@ -44,113 +42,145 @@ function applyOverlayTheme(theme) {
   if (process.platform !== "win32" || !mainWindow || mainWindow.isDestroyed()) return;
 
   const isDark = theme === "dark";
-  const color = isDark ? "#1a1a1a" : "#fafafa";
+  const color = isDark ? "#161618" : "#fafafa";
   const symbolColor = isDark ? "#FFFFFF" : "#111111";
 
   mainWindow.setTitleBarOverlay({ color, symbolColor, height: TITLEBAR_HEIGHT_WIN });
   mainWindow.setBackgroundColor(color);
 }
 
-/**
- * Inject CSS + drag layer + theme watcher + "pin header" patch
- */
-async function injectDesktopPolish(win) {
+function isAppUrl(url) {
+  return typeof url === "string" && url.startsWith(APP_ORIGIN);
+}
+
+function isSupabaseReturn(url) {
+  try {
+    const u = new URL(url);
+    return u.origin === APP_ORIGIN && (u.hash || "").includes("access_token=");
+  } catch {
+    return false;
+  }
+}
+
+function isOAuthUrl(url) {
+  try {
+    const u = new URL(url);
+    const host = u.hostname.toLowerCase();
+
+    // Google + Supabase auth related
+    if (host === "accounts.google.com") return true;
+    if (host.endsWith(".supabase.co")) return true;
+    if (host === "oauth2.googleapis.com") return true;
+    if (host.endsWith(".googleusercontent.com")) return true;
+    if (host.endsWith(".gstatic.com")) return true;
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function openAuthWindow(startUrl) {
+  if (authWindow && !authWindow.isDestroyed()) {
+    authWindow.show();
+    authWindow.focus();
+    authWindow.loadURL(startUrl);
+    return;
+  }
+
+  authWindow = new BrowserWindow({
+    width: 520,
+    height: 720,
+    title: `${APP_NAME} – Sign in`,
+    parent: mainWindow || undefined,
+    modal: false,
+    show: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  authWindow.setMenuBarVisibility(false);
+  authWindow.loadURL(startUrl);
+
+  const maybeFinish = (url) => {
+    if (isSupabaseReturn(url)) {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadURL(url);
+        mainWindow.show();
+        mainWindow.focus();
+      }
+      if (authWindow && !authWindow.isDestroyed()) authWindow.close();
+      authWindow = null;
+    }
+  };
+
+  authWindow.webContents.on("will-redirect", (_e, url) => maybeFinish(url));
+  authWindow.webContents.on("did-navigate", (_e, url) => maybeFinish(url));
+  authWindow.webContents.on("did-navigate-in-page", (_e, url) => maybeFinish(url));
+
+  authWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isOAuthUrl(url) || isAppUrl(url)) return { action: "allow" };
+    shell.openExternal(url);
+    return { action: "deny" };
+  });
+
+  authWindow.on("closed", () => {
+    authWindow = null;
+  });
+}
+
+async function injectDesktopUI(win) {
   const isWindows = process.platform === "win32";
   const overlayHeight = isWindows ? TITLEBAR_HEIGHT_WIN : TITLEBAR_HEIGHT_MAC;
   const rightSafe = isWindows ? WIN_CONTROLS_SAFE_RIGHT : 0;
 
+  // Minimal + safe CSS, no heavy scanning
   const css = `
-    :root {
-      --kasper-titlebar-h: ${overlayHeight}px;
-      --kasper-titlebar-right-safe: ${rightSafe}px;
-      --kasper-pinned-header-h: 0px; /* will be set dynamically */
-    }
+    :root { --kasper-titlebar-h: ${overlayHeight}px; --kasper-titlebar-right-safe: ${rightSafe}px; }
 
-    html, body { height: 100%; }
-
-    /* Reserve space at the top for the overlay titlebar */
+    /* Give the app content room under the overlay */
     body { padding-top: var(--kasper-titlebar-h) !important; }
 
-    body.kasper-desktop-app { -webkit-font-smoothing: antialiased; }
-
-    /* Full-width overlay layer (does NOT block clicks by default) */
-    #kasper-drag-layer {
+    /* Draggable strip (transparent, doesn't steal clicks) */
+    #kasper-drag-strip {
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: var(--kasper-titlebar-h);
-      z-index: 2147483647;
-      background: transparent;
-      pointer-events: none;
-    }
-
-    /* Draggable region (everything except the right-side window buttons area) */
-    #kasper-drag-region {
-      position: absolute;
-      top: 0;
-      left: 0;
+      top: 0; left: 0;
       right: var(--kasper-titlebar-right-safe);
-      height: 100%;
+      height: var(--kasper-titlebar-h);
       -webkit-app-region: drag;
-      pointer-events: auto;
-    }
-
-    /* No-drag zone on the right where native window buttons live */
-    #kasper-no-drag {
-      position: absolute;
-      top: 0;
-      right: 0;
-      width: var(--kasper-titlebar-right-safe);
-      height: 100%;
-      -webkit-app-region: no-drag;
+      background: transparent;
+      z-index: 2147483647;
       pointer-events: none;
     }
 
-    /* Nicer scrollbars (Chromium) */
-    ::-webkit-scrollbar { width: 10px; height: 10px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb {
-      background: rgba(120, 120, 120, 0.35);
-      border-radius: 999px;
-      border: 3px solid transparent;
-      background-clip: padding-box;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(120, 120, 120, 0.55);
-      border: 3px solid transparent;
-      background-clip: padding-box;
+    /* Make common topbars stick below overlay (cheap selectors only) */
+    header, [role="banner"], .topbar, .navbar {
+      position: sticky !important;
+      top: var(--kasper-titlebar-h) !important;
+      z-index: 2147483000 !important;
     }
   `;
 
   try {
     await win.webContents.insertCSS(css);
-
-    // Drag layer + class
     await win.webContents.executeJavaScript(`
       (function () {
-        document.body.classList.add('kasper-desktop-app');
-
-        if (!document.getElementById('kasper-drag-layer')) {
-          const layer = document.createElement('div');
-          layer.id = 'kasper-drag-layer';
-
-          const drag = document.createElement('div');
-          drag.id = 'kasper-drag-region';
-
-          const nodrag = document.createElement('div');
-          nodrag.id = 'kasper-no-drag';
-
-          layer.appendChild(drag);
-          layer.appendChild(nodrag);
-          document.body.appendChild(layer);
+        if (!document.getElementById('kasper-drag-strip')) {
+          const d = document.createElement('div');
+          d.id = 'kasper-drag-strip';
+          document.body.appendChild(d);
         }
       })();
     `);
+  } catch (e) {
+    log.warn("injectDesktopUI failed:", e);
+  }
+}
 
-    /**
-     * Theme watcher: detects theme changes inside your app and notifies Electron
-     */
+async function injectThemeWatcher(win) {
+  try {
     await win.webContents.executeJavaScript(`
       (function () {
         function detectTheme() {
@@ -171,130 +201,24 @@ async function injectDesktopPolish(win) {
           if (ls === 'dark' || ls === 'light') return ls;
 
           return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-            ? 'dark'
-            : 'light';
+            ? 'dark' : 'light';
         }
 
         let last = null;
-
         function tick() {
           const t = detectTheme();
           if (t !== last) {
             last = t;
-            if (window.kasperDesktop && window.kasperDesktop.setTheme) {
-              window.kasperDesktop.setTheme(t);
-            }
+            window.kasperDesktop?.setTheme?.(t);
           }
         }
 
         tick();
-
-        const obs = new MutationObserver(tick);
-        obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class','data-theme'] });
-        obs.observe(document.body, { attributes: true, attributeFilter: ['class','data-theme'] });
-
         setInterval(tick, 500);
       })();
     `);
-
-    /**
-     * Pin the app header (search + icons) so it doesn't scroll away.
-     * We detect it by searching for the search input ("Sök...") and pinning its closest container.
-     */
-    await win.webContents.executeJavaScript(`
-      (function () {
-        function findHeaderEl() {
-          // Primary: the search input in your header
-          const search =
-            document.querySelector('input[placeholder="Sök..."]') ||
-            document.querySelector('input[placeholder^="Sök"]');
-
-          if (search) {
-            // Walk up to find a reasonable "header row" container near top
-            let el = search;
-            for (let i = 0; i < 8; i++) {
-              if (!el || !el.parentElement) break;
-              el = el.parentElement;
-
-              const r = el.getBoundingClientRect();
-              // Something near the top and spanning most of content width
-              if (r.top >= 0 && r.top < 220 && r.height > 40 && r.height < 140 && r.width > 400) {
-                return el;
-              }
-            }
-          }
-
-          // Fallbacks
-          return document.querySelector('header') || null;
-        }
-
-        function pinHeader() {
-          const header = findHeaderEl();
-          if (!header) return;
-
-          // Avoid re-applying
-          if (header.dataset.kasperPinned === "1") return;
-
-          header.dataset.kasperPinned = "1";
-
-          // Compute where the content area starts (so we don't cover left sidebar)
-          const rect = header.getBoundingClientRect();
-          const left = rect.left;
-          const width = rect.width;
-          const height = rect.height;
-
-          document.documentElement.style.setProperty('--kasper-pinned-header-h', height + 'px');
-
-          // Create a spacer so content below doesn't jump under the pinned header
-          const spacer = document.createElement('div');
-          spacer.id = 'kasper-header-spacer';
-          spacer.style.height = height + 'px';
-          spacer.style.width = '1px';
-          spacer.style.pointerEvents = 'none';
-
-          // Put spacer right after header in DOM flow (best-effort)
-          header.parentElement && header.parentElement.insertBefore(spacer, header.nextSibling);
-
-          // Pin it
-          header.style.position = 'fixed';
-          header.style.top = 'var(--kasper-titlebar-h)';
-          header.style.left = left + 'px';
-          header.style.width = width + 'px';
-          header.style.zIndex = '2147483646';
-          header.style.margin = '0';
-          header.style.transform = 'none';
-
-          // Make sure header stays interactive
-          header.style.pointerEvents = 'auto';
-
-          // Update on resize
-          const update = () => {
-            const r = header.getBoundingClientRect();
-            // Because it's fixed now, we need to recompute left/width from the layout container.
-            // We'll instead measure the spacer's previous sibling layout by temporarily clearing left/width.
-            header.style.left = '';
-            header.style.width = '';
-            const rr = header.getBoundingClientRect();
-            header.style.left = rr.left + 'px';
-            header.style.width = rr.width + 'px';
-          };
-
-          window.addEventListener('resize', () => {
-            try { update(); } catch (e) {}
-          }, { passive: true });
-        }
-
-        // Try now, and retry a few times (SPA apps mount late)
-        let tries = 0;
-        const t = setInterval(() => {
-          tries++;
-          pinHeader();
-          if (tries > 20) clearInterval(t);
-        }, 250);
-      })();
-    `);
   } catch (e) {
-    log.warn("Failed to inject desktop polish:", e);
+    log.warn("injectThemeWatcher failed:", e);
   }
 }
 
@@ -303,11 +227,9 @@ function createWindow() {
   const isMac = process.platform === "darwin";
 
   const windowIcon =
-    isWindows
-      ? path.join(__dirname, "assets", "icon.ico")
-      : path.join(__dirname, "assets", "icon.png");
+    isWindows ? path.join(__dirname, "assets", "icon.ico") : path.join(__dirname, "assets", "icon.png");
 
-  const overlay = getOverlayColorsFromSystem();
+  const overlay = getOverlayColors();
 
   const win = new BrowserWindow({
     width: 1200,
@@ -325,53 +247,70 @@ function createWindow() {
     ...(isWindows
       ? {
           titleBarStyle: "hidden",
-          titleBarOverlay: {
-            color: overlay.color,
-            symbolColor: overlay.symbolColor,
-            height: TITLEBAR_HEIGHT_WIN
-          }
+          titleBarOverlay: { color: overlay.color, symbolColor: overlay.symbolColor, height: TITLEBAR_HEIGHT_WIN }
         }
       : {}),
 
-    ...(isMac
-      ? { titleBarStyle: "hiddenInset" }
-      : {})
+    ...(isMac ? { titleBarStyle: "hiddenInset" } : {})
   });
 
   mainWindow = win;
 
-  win.loadURL(APP_URL);
+  win.loadURL(APP_ORIGIN);
   win.setMenuBarVisibility(false);
 
-  // Force desktop title
   win.webContents.on("page-title-updated", (e) => {
     e.preventDefault();
     win.setTitle(APP_NAME);
   });
 
-  // External links open in browser
+  // popups / window.open
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith(APP_URL)) return { action: "allow" };
+    if (isOAuthUrl(url) || isSupabaseReturn(url)) {
+      openAuthWindow(url);
+      return { action: "deny" };
+    }
+    if (isAppUrl(url)) return { action: "allow" };
     shell.openExternal(url);
     return { action: "deny" };
   });
 
+  // navigations
   win.webContents.on("will-navigate", (e, url) => {
-    if (url.startsWith(APP_URL)) return;
+    if (isAppUrl(url)) return;
+
+    if (isOAuthUrl(url)) {
+      e.preventDefault();
+      openAuthWindow(url);
+      return;
+    }
+
     e.preventDefault();
     shell.openExternal(url);
   });
 
-  // Inject polish after load
-  win.webContents.on("did-finish-load", () => injectDesktopPolish(win));
+  // redirects (important for oauth)
+  win.webContents.on("will-redirect", (e, url) => {
+    if (isAppUrl(url)) return;
+
+    if (isOAuthUrl(url)) {
+      e.preventDefault();
+      openAuthWindow(url);
+    }
+  });
+
+  win.webContents.on("did-finish-load", async () => {
+    await injectDesktopUI(win);
+    await injectThemeWatcher(win);
+  });
 
   win.once("ready-to-show", () => win.show());
 
-  // Minimize to tray on close
-  win.on("close", (e) => {
-    if (tray && !app.isQuiting) {
-      e.preventDefault();
-      win.hide();
+  nativeTheme.on("updated", () => {
+    if (isWindows && mainWindow && !mainWindow.isDestroyed()) {
+      const o = getOverlayColors();
+      mainWindow.setTitleBarOverlay({ color: o.color, symbolColor: o.symbolColor, height: TITLEBAR_HEIGHT_WIN });
+      mainWindow.setBackgroundColor(o.color);
     }
   });
 
@@ -386,35 +325,27 @@ function setupTray() {
 
   tray = new Tray(iconPath);
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: "Open Kasper",
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "Open Kasper",
+        click: () => {
+          mainWindow?.show();
+          mainWindow?.focus();
+        }
+      },
+      { type: "separator" },
+      {
+        label: "Quit",
+        click: () => {
+          app.isQuiting = true;
+          app.quit();
         }
       }
-    },
-    { type: "separator" },
-    {
-      label: "Quit",
-      click: () => {
-        app.isQuiting = true;
-        app.quit();
-      }
-    }
-  ]);
+    ])
+  );
 
   tray.setToolTip(APP_NAME);
-  tray.setContextMenu(contextMenu);
-
-  tray.on("double-click", () => {
-    if (mainWindow) {
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
 }
 
 function setupAutoLaunch() {
@@ -432,18 +363,15 @@ app.setName(APP_NAME);
 
 app.whenReady().then(() => {
   createWindow();
-
-  ipcMain.on("kasper:set-theme", (_evt, theme) => {
-    applyOverlayTheme(theme);
-  });
-
   setupTray();
   setupAutoLaunch();
   setupAutoUpdates();
 
+  ipcMain.on("kasper:set-theme", (_evt, theme) => applyOverlayTheme(theme));
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
-    else if (mainWindow) mainWindow.show();
+    else mainWindow?.show();
   });
 });
 
