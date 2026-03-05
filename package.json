@@ -1,7 +1,7 @@
 {
   "name": "kasper-desktop",
   "productName": "Kasper",
-  "version": "2.0.8",
+  "version": "2.0.9",
   "description": "Kasper Desktop App",
   "author": "Kasper",
   "main": "main.js",
@@ -29,13 +29,11 @@
         "releaseType": "release"
       }
     ],
-
     "win": {
       "target": "nsis",
       "icon": "assets/icon.ico",
       "artifactName": "Kasper.exe"
     },
-
     "nsis": {
       "oneClick": false,
       "perMachine": false,
@@ -51,7 +49,6 @@
       "installerHeader": "assets/installerHeader.bmp",
       "artifactName": "Kasper.exe"
     },
-
     "mac": {
       "target": "dmg",
       "icon": "assets/icon.icns",
@@ -66,6 +63,7 @@
   },
   "dependencies": {
     "electron-log": "^5.4.3",
+    "electron-store": "^8.1.0",
     "electron-updater": "^6.7.3"
   }
 }
