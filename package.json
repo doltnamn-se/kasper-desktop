@@ -1,7 +1,7 @@
 {
   "name": "kasper-desktop",
   "productName": "Kasper",
-  "version": "2.1.17",
+  "version": "2.1.18",
   "description": "Kasper Desktop App",
   "author": "Kasper",
   "main": "main.js",
@@ -51,19 +51,19 @@
       "artifactName": "Kasper.exe"
     },
     "mac": {
-  "target": [
-    {
-      "target": "dmg",
-      "artifactName": "Kasper.dmg"
-    },
-    {
-      "target": "zip"
+      "target": [
+        {
+          "target": "dmg",
+          "artifactName": "Kasper.dmg"
+        },
+        {
+          "target": "zip"
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
     }
-  ],
-  "icon": "assets/icon.icns",
-  "hardenedRuntime": true,
-  "gatekeeperAssess": false
-}
   },
   "devDependencies": {
     "electron": "^28.0.0",
