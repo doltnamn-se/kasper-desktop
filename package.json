@@ -57,8 +57,7 @@
       ],
       "icon": "assets/icon.icns",
       "hardenedRuntime": true,
-      "gatekeeperAssess": false,
-      "artifactName": "Kasper.dmg"
+      "gatekeeperAssess": false
     }
   },
   "devDependencies": {
