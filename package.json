@@ -1,7 +1,7 @@
 {
   "name": "kasper-desktop",
   "productName": "Kasper",
-  "version": "2.0.11",
+  "version": "2.0.12",
   "description": "Kasper Desktop App",
   "author": "Kasper",
   "main": "main.js",
