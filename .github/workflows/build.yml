@@ -51,9 +51,9 @@ jobs:
           security import certificate.p12 -k temp.keychain -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k actions temp.keychain
 
-      - name: Create Apple API key file
+      - name: Decode Apple API key
         run: |
-          echo "$APPLE_API_KEY" > AuthKey.p8
+          echo "$APPLE_API_KEY" | base64 --decode > AuthKey.p8
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
 
