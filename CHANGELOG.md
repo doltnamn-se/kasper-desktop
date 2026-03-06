@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [2.1.21](https://github.com/doltnamn-se/kasper-desktop/compare/v2.1.20...v2.1.21) (2026-03-06)
+
 ### [2.1.20](https://github.com/doltnamn-se/kasper-desktop/compare/v2.1.19...v2.1.20) (2026-03-06)
 
 ### [2.1.19](https://github.com/doltnamn-se/kasper-desktop/compare/v2.1.18...v2.1.19) (2026-03-06)
