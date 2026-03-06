@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("kasperDesktop", {
 
   // Preferences (launch on startup, minimize to tray, etc.)
   setPreference: (key, value) => ipcRenderer.send("kasper:set-preference", key, value),
+  getPreference: (key) => ipcRenderer.invoke("kasper:get-preference", key),
 
   // Deep link handling
   onDeepLink: (callback) => ipcRenderer.on("kasper:deep-link", (_event, url) => callback(url)),

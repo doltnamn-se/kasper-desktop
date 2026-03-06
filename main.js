@@ -497,12 +497,22 @@ ipcMain.on("kasper:set-badge", (_evt, count) => {
 
   ipcMain.on("kasper:set-preference", (_evt, key, value) => {
     log.info(`Preference set: ${key} = ${value}`);
-    if (key === "openAtLogin") {
+    if (key === "openAtLogin" || key === "autoLaunch") {
       store.set("openAtLogin", value);
       app.setLoginItemSettings({ openAtLogin: !!value });
     } else if (key === "minimizeToTray") {
       store.set("minimizeToTray", value);
     }
+  });
+
+  ipcMain.handle("kasper:get-preference", (_evt, key) => {
+    if (key === "autoLaunch" || key === "openAtLogin") {
+      return app.getLoginItemSettings().openAtLogin;
+    }
+    if (key === "minimizeToTray") {
+      return store.get("minimizeToTray", true);
+    }
+    return null;
   });
 
   app.on("open-url", (event, url) => {
