@@ -13,11 +13,18 @@
     "publish:mac": "electron-builder --mac --publish always"
   },
   "build": {
-    "appId": "com.kasper.desktop",
-    "productName": "Kasper",
-    "directories": {
-      "output": "dist"
-    },
+  "appId": "com.kasper.desktop",
+  "productName": "Kasper",
+
+  "publish": {
+    "provider": "github",
+    "owner": "doltnamn-se",
+    "repo": "kasper-desktop"
+  },
+
+  "directories": {
+    "output": "dist"
+  },
     "files": [
       "**/*"
     ],
@@ -64,6 +71,6 @@
   "dependencies": {
     "electron-log": "^5.4.3",
     "electron-store": "^8.1.0",
-    "electron-updater": "^6.7.3"
+    "electron-updater": "^6.8.3"
   }
 }

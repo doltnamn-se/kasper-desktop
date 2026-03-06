@@ -3,6 +3,7 @@ const path = require("path");
 const { autoUpdater } = require("electron-updater");
 const log = require("electron-log");
 const Store = require("electron-store");
+const { autoUpdater } = require("electron-updater")
 
 const APP_NAME = "Kasper";
 const APP_ORIGIN = "https://app.joinkasper.com";
@@ -416,6 +417,8 @@ app.whenReady().then(() => {
   setupTray();
   setupAutoLaunch();
   setupAutoUpdates();
+
+  autoUpdater.checkForUpdatesAndNotify()
 
   ipcMain.on("kasper:set-theme", (_evt, theme) => applyOverlayTheme(theme));
 
