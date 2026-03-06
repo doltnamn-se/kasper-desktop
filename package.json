@@ -51,19 +51,15 @@
       "artifactName": "Kasper.exe"
     },
     "mac": {
-      "target": [
-        {
-          "target": "dmg",
-          "artifactName": "Kasper.dmg"
-        },
-        {
-          "target": "zip"
-        }
-      ],
-      "icon": "assets/icon.icns",
-      "hardenedRuntime": true,
-      "gatekeeperAssess": false
-    }
+  "target": ["dmg", "zip"],
+  "icon": "assets/icon.icns",
+  "hardenedRuntime": true,
+  "gatekeeperAssess": false
+},
+
+"dmg": {
+  "artifactName": "Kasper.dmg"
+}
   },
   "devDependencies": {
     "electron": "^28.0.0",
