@@ -10,24 +10,12 @@
     "build:win": "electron-builder --win",
     "build:mac": "electron-builder --mac",
     "publish:win": "electron-builder --win --publish always",
-    "publish:mac": "electron-builder --mac --publish always"
+    "publish:mac": "electron-builder --mac --publish always",
+    "release": "standard-version && git push --follow-tags origin main"
   },
   "build": {
-  "appId": "com.kasper.desktop",
-  "productName": "Kasper",
-
-  "publish": {
-    "provider": "github",
-    "owner": "doltnamn-se",
-    "repo": "kasper-desktop"
-  },
-
-  "directories": {
-    "output": "dist"
-  },
-    "files": [
-      "**/*"
-    ],
+    "appId": "com.kasper.desktop",
+    "productName": "Kasper",
     "publish": [
       {
         "provider": "github",
@@ -35,6 +23,12 @@
         "repo": "kasper-desktop",
         "releaseType": "release"
       }
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*"
     ],
     "win": {
       "target": "nsis",
@@ -66,7 +60,8 @@
   },
   "devDependencies": {
     "electron": "^28.0.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "standard-version": "^9.5.0"
   },
   "dependencies": {
     "electron-log": "^5.4.3",
