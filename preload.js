@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld("kasperDesktop", {
   // Auth state → Electron (for conditional tray menu)
   sendAuthState: (isLoggedIn) => ipcRenderer.send("kasper:auth-state", isLoggedIn),
 
+  setTitleBarOverlay: (options) => ipcRenderer.send('set-title-bar-overlay', options),
+
+
   // Notifications & badge
   setBadgeCount: (count) => ipcRenderer.send("kasper:set-badge", count),
   showNotification: (opts) => ipcRenderer.send("kasper:show-notification", opts),

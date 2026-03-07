@@ -434,6 +434,13 @@ app.whenReady().then(() => {
     rebuildTray();
   });
 
+  ipcMain.on('set-title-bar-overlay', (_event, options) => {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win && process.platform === 'win32') {
+    win.setTitleBarOverlay(options);
+  }
+  });
+
   ipcMain.on("kasper:show-notification", (_evt, opts) => {
   if (!Notification.isSupported()) return;
   const notif = new Notification({
