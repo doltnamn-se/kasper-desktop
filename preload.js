@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld("kasperDesktop", {
   maximize: () => ipcRenderer.send("kasper:maximize"),
   close: () => ipcRenderer.send("kasper:close"),
 
+  isMaximized: () => ipcRenderer.invoke("kasper:is-maximized"),
+  onMaximizeChange: (callback) => ipcRenderer.on("kasper:window-maximized", (_event, val) => callback(val)),
+
   // Preferences (launch on startup, minimize to tray, etc.)
   setPreference: (key, value) => ipcRenderer.send("kasper:set-preference", key, value),
   getPreference: (key) => ipcRenderer.invoke("kasper:get-preference", key),

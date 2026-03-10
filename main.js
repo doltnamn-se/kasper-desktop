@@ -422,6 +422,10 @@ app.whenReady().then(() => {
     else mainWindow?.maximize();
   });
   ipcMain.on("kasper:close", () => mainWindow?.close());
+  
+    ipcMain.handle("kasper:is-maximized", () => mainWindow?.isMaximized() ?? false);
+  mainWindow.on("maximize", () => mainWindow.webContents.send("kasper:window-maximized", true));
+  mainWindow.on("unmaximize", () => mainWindow.webContents.send("kasper:window-maximized", false));
 
   ipcMain.on("kasper:auth-state", (_evt, loggedIn) => {
     isUserLoggedIn = !!loggedIn;
