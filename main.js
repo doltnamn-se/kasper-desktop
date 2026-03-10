@@ -27,7 +27,6 @@ const store = new Store({
 log.transports.file.level = "info";
 autoUpdater.logger = log;
 
-// Safe helper — always shows a window, recreates if destroyed
 function showOrCreateWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
@@ -38,7 +37,6 @@ function showOrCreateWindow() {
   }
 }
 
-// Locale helper for tray labels
 function isSvLocale() {
   try {
     return app.getLocale().startsWith("sv");
@@ -52,7 +50,6 @@ if (!gotLock) app.quit();
 else {
   app.on("second-instance", (_event, argv) => {
     showOrCreateWindow();
-
     const deepLink = argv.find((arg) => arg.startsWith("kasper://"));
     if (deepLink) handleDeepLink(deepLink);
   });
@@ -73,13 +70,12 @@ function getOverlayColors() {
 }
 
 function applyOverlayTheme(theme) {
-  if (process.platform !== "win32" || !mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
 
   const isDark = theme === "dark";
   const color = isDark ? "#161618" : "#fafafa";
-  const symbolColor = isDark ? "#FFFFFF" : "#111111";
 
-  mainWindow.setTitleBarOverlay({ color, symbolColor, height: TITLEBAR_HEIGHT_WIN });
+  // On Windows we're frameless — no overlay to set, just update background
   mainWindow.setBackgroundColor(color);
 }
 
@@ -196,6 +192,7 @@ async function injectDesktopUI(win) {
           d.id = 'kasper-drag-strip';
           document.body.appendChild(d);
         }
+        document.documentElement.dataset.desktopPlatform = '${process.platform}';
       })();
     `);
   } catch (e) {
@@ -264,13 +261,14 @@ function createWindow() {
       contextIsolation: true,
     },
 
+    // Windows: fully frameless — custom controls rendered in web layer
     ...(isWindows
       ? {
-          titleBarStyle: "hidden",
-          titleBarOverlay: { color: overlay.color, symbolColor: overlay.symbolColor, height: TITLEBAR_HEIGHT_WIN },
+          frame: false,
         }
       : {}),
 
+    // macOS: native traffic lights
     ...(isMac ? { titleBarStyle: "hiddenInset" } : {}),
   });
 
@@ -336,10 +334,10 @@ function createWindow() {
     }
   });
 
+  // macOS only: sync background color on system theme change
   nativeTheme.on("updated", () => {
-    if (isWindows && mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       const o = getOverlayColors();
-      mainWindow.setTitleBarOverlay({ color: o.color, symbolColor: o.symbolColor, height: TITLEBAR_HEIGHT_WIN });
       mainWindow.setBackgroundColor(o.color);
     }
   });
@@ -347,7 +345,6 @@ function createWindow() {
   return win;
 }
 
-// ---------- Dynamic tray menu ----------
 function rebuildTray() {
   if (!tray) return;
 
@@ -383,7 +380,6 @@ function setupTray() {
   tray.setToolTip(APP_NAME);
   tray.on("click", () => showOrCreateWindow());
 
-  // Build initial menu (user not logged in yet)
   rebuildTray();
 }
 
@@ -408,7 +404,6 @@ if (process.defaultApp) {
 }
 
 app.setName(APP_NAME);
-
 app.setAppUserModelId('com.kasper.desktop');
 
 app.whenReady().then(() => {
@@ -417,7 +412,7 @@ app.whenReady().then(() => {
   setupAutoLaunch();
   setupAutoUpdates();
 
-  autoUpdater.checkForUpdatesAndNotify()
+  autoUpdater.checkForUpdatesAndNotify();
 
   ipcMain.on("kasper:set-theme", (_evt, theme) => applyOverlayTheme(theme));
 
@@ -428,79 +423,68 @@ app.whenReady().then(() => {
   });
   ipcMain.on("kasper:close", () => mainWindow?.close());
 
-  // Auth state from web app → rebuild tray conditionally
   ipcMain.on("kasper:auth-state", (_evt, loggedIn) => {
     isUserLoggedIn = !!loggedIn;
     rebuildTray();
   });
 
-  ipcMain.on('set-title-bar-overlay', (_event, options) => {
-  const win = BrowserWindow.getFocusedWindow();
-  if (win && process.platform === 'win32') {
-    win.setTitleBarOverlay(options);
-  }
-  });
-
   ipcMain.on("kasper:show-notification", (_evt, opts) => {
-  if (!Notification.isSupported()) return;
-  const notif = new Notification({
-    title: opts.title || APP_NAME,
-    body: opts.body || "",
-    icon: path.join(__dirname, "assets", "icon.png"),
-    urgency: "critical",
-    silent: false,
-  });
-  notif.on("click", () => {
-    showOrCreateWindow();
-    if (opts.route && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send("kasper:deep-link", `kasper://open${opts.route}`);
+    if (!Notification.isSupported()) return;
+    const notif = new Notification({
+      title: opts.title || APP_NAME,
+      body: opts.body || "",
+      icon: path.join(__dirname, "assets", "icon.png"),
+      urgency: "critical",
+      silent: false,
+    });
+    notif.on("click", () => {
+      showOrCreateWindow();
+      if (opts.route && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("kasper:deep-link", `kasper://open${opts.route}`);
+      }
+    });
+    notif.show();
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isFocused()) {
+      mainWindow.flashFrame(true);
     }
   });
-  notif.show();
-  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isFocused()) {
-  mainWindow.flashFrame(true);
-  }
-});
 
+  ipcMain.on("kasper:set-badge", (_evt, count) => {
+    if (process.platform === "darwin") {
+      app.dock.setBadge(count > 0 ? String(count) : "");
+    }
 
-ipcMain.on("kasper:set-badge", (_evt, count) => {
-  if (process.platform === "darwin") {
-    app.dock.setBadge(count > 0 ? String(count) : "");
-  }
+    if (process.platform === "win32" && mainWindow && !mainWindow.isDestroyed()) {
+      if (count > 0) {
+        const size = 16;
+        const buffer = Buffer.alloc(size * size * 4, 0);
 
-  if (process.platform === "win32" && mainWindow && !mainWindow.isDestroyed()) {
-    if (count > 0) {
-      const size = 16;
-      const buffer = Buffer.alloc(size * size * 4, 0);
-
-      const cx = 12, cy = 4, r = 3;
-      for (let y = 0; y < size; y++) {
-        for (let x = 0; x < size; x++) {
-          const dx = x - cx, dy = y - cy;
-          if (dx * dx + dy * dy <= r * r) {
-            const i = (y * size + x) * 4;
-            buffer[i] = 255;
-            buffer[i + 1] = 0;
-            buffer[i + 2] = 0;
-            buffer[i + 3] = 255;
+        const cx = 12, cy = 4, r = 3;
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            const dx = x - cx, dy = y - cy;
+            if (dx * dx + dy * dy <= r * r) {
+              const i = (y * size + x) * 4;
+              buffer[i] = 255;
+              buffer[i + 1] = 0;
+              buffer[i + 2] = 0;
+              buffer[i + 3] = 255;
+            }
           }
         }
+
+        const { nativeImage } = require("electron");
+        const badge = nativeImage.createFromBuffer(buffer, { width: size, height: size });
+        mainWindow.setOverlayIcon(badge, `${count} unread`);
+      } else {
+        mainWindow.setOverlayIcon(null, "");
       }
-
-      const { nativeImage } = require("electron");
-      const badge = nativeImage.createFromBuffer(buffer, { width: size, height: size });
-      mainWindow.setOverlayIcon(badge, `${count} unread`);
-    } else {
-      mainWindow.setOverlayIcon(null, "");
     }
-  }
 
-  if (tray) {
-    tray.setToolTip(count > 0 ? `${APP_NAME} (${count} unread)` : APP_NAME);
-  }
-});
-
-
+    if (tray) {
+      tray.setToolTip(count > 0 ? `${APP_NAME} (${count} unread)` : APP_NAME);
+    }
+  });
 
   ipcMain.on("kasper:set-preference", (_evt, key, value) => {
     log.info(`Preference set: ${key} = ${value}`);
